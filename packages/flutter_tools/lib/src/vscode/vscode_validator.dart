@@ -4,6 +4,7 @@
 
 import 'dart:async';
 
+import '../base/user_messages.dart';
 import '../base/version.dart';
 import '../doctor.dart';
 import 'vscode.dart';
@@ -12,7 +13,6 @@ class VsCodeValidator extends DoctorValidator {
   VsCodeValidator(this._vsCode) : super(_vsCode.productName);
 
   final VsCode _vsCode;
-
 
   static Iterable<DoctorValidator> get installedValidators {
     return VsCode
@@ -24,7 +24,7 @@ class VsCodeValidator extends DoctorValidator {
   Future<ValidationResult> validate() async {
     final String vsCodeVersionText = _vsCode.version == Version.unknown
         ? null
-        : 'version ${_vsCode.version}';
+        : userMessages.vsCodeVersion(_vsCode.version.toString());
 
     final ValidationType validationType = _vsCode.isValid
         ? ValidationType.installed

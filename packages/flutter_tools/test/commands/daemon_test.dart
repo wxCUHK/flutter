@@ -37,7 +37,7 @@ void main() {
       daemon = Daemon(
         commands.stream,
         responses.add,
-        notifyingLogger: notifyingLogger
+        notifyingLogger: notifyingLogger,
       );
       commands.add(<String, dynamic>{'id': 0, 'method': 'daemon.version'});
       final Map<String, dynamic> response = await responses.stream.firstWhere(_notEvent);
@@ -101,7 +101,7 @@ void main() {
       daemon = Daemon(
         commands.stream,
         responses.add,
-        notifyingLogger: notifyingLogger
+        notifyingLogger: notifyingLogger,
       );
       commands.add(<String, dynamic>{'id': 0, 'method': 'daemon.shutdown'});
       return daemon.onExit.then<void>((int code) async {
@@ -148,8 +148,8 @@ void main() {
         'id': 0,
         'method': 'app.callServiceExtension',
         'params': <String, String> {
-          'methodName': 'ext.flutter.debugPaint'
-        }
+          'methodName': 'ext.flutter.debugPaint',
+        },
       });
       final Map<String, dynamic> response = await responses.stream.firstWhere(_notEvent);
       expect(response['id'], 0);
@@ -179,40 +179,39 @@ void main() {
       await commands.close();
     });
 
-    testUsingContext('daemon should send showMessage on startup if no Android devices are available', () async {
-      final StreamController<Map<String, dynamic>> commands = StreamController<Map<String, dynamic>>();
-      final StreamController<Map<String, dynamic>> responses = StreamController<Map<String, dynamic>>();
-      daemon = Daemon(
-          commands.stream,
-          responses.add,
-          notifyingLogger: notifyingLogger,
-      );
-
-      final Map<String, dynamic> response =
-        await responses.stream.skipWhile(_isConnectedEvent).first;
-      expect(response['event'], 'daemon.showMessage');
-      expect(response['params'], isMap);
-      expect(response['params'], containsPair('level', 'warning'));
-      expect(response['params'], containsPair('title', 'Unable to list devices'));
-      expect(response['params'], containsPair('message', contains('Unable to discover Android devices')));
-    }, overrides: <Type, Generator>{
-      AndroidWorkflow: () => MockAndroidWorkflow(canListDevices: false),
-      IOSWorkflow: () => MockIOSWorkflow(),
-      FuchsiaWorkflow: () => MockFuchsiaWorkflow(),
-    });
-
     testUsingContext('device.getDevices should respond with list', () async {
       final StreamController<Map<String, dynamic>> commands = StreamController<Map<String, dynamic>>();
       final StreamController<Map<String, dynamic>> responses = StreamController<Map<String, dynamic>>();
       daemon = Daemon(
         commands.stream,
         responses.add,
-        notifyingLogger: notifyingLogger
+        notifyingLogger: notifyingLogger,
       );
       commands.add(<String, dynamic>{'id': 0, 'method': 'device.getDevices'});
       final Map<String, dynamic> response = await responses.stream.firstWhere(_notEvent);
       expect(response['id'], 0);
       expect(response['result'], isList);
+      await responses.close();
+      await commands.close();
+    });
+
+    testUsingContext('device.getDevices reports avaiable devices', () async {
+      final StreamController<Map<String, dynamic>> commands = StreamController<Map<String, dynamic>>();
+      final StreamController<Map<String, dynamic>> responses = StreamController<Map<String, dynamic>>();
+      daemon = Daemon(
+        commands.stream,
+        responses.add,
+        notifyingLogger: notifyingLogger,
+      );
+      final MockPollingDeviceDiscovery discoverer = MockPollingDeviceDiscovery();
+      daemon.deviceDomain.addDeviceDiscoverer(discoverer);
+      discoverer.addDevice(MockAndroidDevice());
+      commands.add(<String, dynamic>{'id': 0, 'method': 'device.getDevices'});
+      final Map<String, dynamic> response = await responses.stream.firstWhere(_notEvent);
+      expect(response['id'], 0);
+      final dynamic result = response['result'];
+      expect(result, isList);
+      expect(result, isNotEmpty);
       await responses.close();
       await commands.close();
     });
@@ -223,7 +222,7 @@ void main() {
       daemon = Daemon(
           commands.stream,
           responses.add,
-          notifyingLogger: notifyingLogger
+          notifyingLogger: notifyingLogger,
       );
 
       final MockPollingDeviceDiscovery discoverer = MockPollingDeviceDiscovery();
@@ -256,7 +255,7 @@ void main() {
         commands.stream,
         responses.add,
         daemonCommand: command,
-        notifyingLogger: notifyingLogger
+        notifyingLogger: notifyingLogger,
       );
 
       commands.add(<String, dynamic>{ 'id': 0, 'method': 'emulator.launch' });
@@ -273,7 +272,7 @@ void main() {
       daemon = Daemon(
         commands.stream,
         responses.add,
-        notifyingLogger: notifyingLogger
+        notifyingLogger: notifyingLogger,
       );
       commands.add(<String, dynamic>{'id': 0, 'method': 'emulator.getEmulators'});
       final Map<String, dynamic> response = await responses.stream.firstWhere(_notEvent);
@@ -288,15 +287,15 @@ void main() {
     test('OperationResult', () {
       expect(
         jsonEncodeObject(OperationResult.ok),
-        '{"code":0,"message":""}'
+        '{"code":0,"message":""}',
       );
       expect(
         jsonEncodeObject(OperationResult(1, 'foo')),
-        '{"code":1,"message":"foo"}'
+        '{"code":1,"message":"foo"}',
       );
       expect(
         jsonEncodeObject(OperationResult(0, 'foo', hintMessage: 'my hint', hintId: 'myId')),
-        '{"code":0,"message":"foo","hintMessage":"my hint","hintId":"myId"}'
+        '{"code":0,"message":"foo","hintMessage":"my hint","hintId":"myId"}',
       );
     });
   });
