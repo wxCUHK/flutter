@@ -1,6 +1,7 @@
 // Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -116,6 +117,9 @@ enum OverlayVisibilityMode {
 /// rounded rectangle border around the text field. If you set the [decoration]
 /// property to null, the decoration will be removed entirely.
 ///
+/// Remember to [dispose] of the [TextEditingController] when it is no longer needed.
+/// This will ensure we discard any resources used by the object.
+///
 /// See also:
 ///
 ///  * <https://developer.apple.com/documentation/uikit/uitextfield>
@@ -123,6 +127,7 @@ enum OverlayVisibilityMode {
 ///    Design UI conventions.
 ///  * [EditableText], which is the raw text editing control at the heart of a
 ///    [TextField].
+///  * Learn how to use a [TextEditingController] in one of our [cookbook recipe]s.(https://flutter.dev/docs/cookbook/forms/text-field-changes#2-use-a-texteditingcontroller)
 class CupertinoTextField extends StatefulWidget {
   /// Creates an iOS-style text field.
   ///
@@ -138,8 +143,13 @@ class CupertinoTextField extends StatefulWidget {
   /// this is a single-line text field and will scroll horizontally when
   /// overflown. [maxLines] must not be zero.
   ///
+  /// The text cursor is not shown if [showCursor] is false or if [showCursor]
+  /// is null (the default) and [readOnly] is true.
+  ///
   /// See also:
   ///
+  ///  * [minLines]
+  ///  * [expands], to allow the widget to size itself to its parent's height.
   ///  * [maxLength], which discusses the precise meaning of "number of
   ///    characters" and how it may differ from the intuitive meaning.
   const CupertinoTextField({
@@ -149,6 +159,10 @@ class CupertinoTextField extends StatefulWidget {
     this.decoration = _kDefaultRoundedBorderDecoration,
     this.padding = const EdgeInsets.all(6.0),
     this.placeholder,
+    this.placeholderStyle = const TextStyle(
+      fontWeight: FontWeight.w300,
+      color: _kInactiveTextColor
+    ),
     this.prefix,
     this.prefixMode = OverlayVisibilityMode.always,
     this.suffix,
@@ -160,10 +174,15 @@ class CupertinoTextField extends StatefulWidget {
     this.style,
     this.strutStyle,
     this.textAlign = TextAlign.start,
+    this.textAlignVertical,
+    this.readOnly = false,
+    this.showCursor,
     this.autofocus = false,
     this.obscureText = false,
     this.autocorrect = true,
     this.maxLines = 1,
+    this.minLines,
+    this.expands = false,
     this.maxLength,
     this.maxLengthEnforced = true,
     this.onChanged,
@@ -176,13 +195,30 @@ class CupertinoTextField extends StatefulWidget {
     this.cursorColor,
     this.keyboardAppearance,
     this.scrollPadding = const EdgeInsets.all(20.0),
+    this.dragStartBehavior = DragStartBehavior.start,
+    this.enableInteractiveSelection,
+    this.onTap,
+    this.scrollController,
+    this.scrollPhysics,
   }) : assert(textAlign != null),
+       assert(readOnly != null),
        assert(autofocus != null),
        assert(obscureText != null),
        assert(autocorrect != null),
        assert(maxLengthEnforced != null),
        assert(scrollPadding != null),
+       assert(dragStartBehavior != null),
        assert(maxLines == null || maxLines > 0),
+       assert(minLines == null || minLines > 0),
+       assert(
+         (maxLines == null) || (minLines == null) || (maxLines >= minLines),
+         'minLines can\'t be greater than maxLines',
+       ),
+       assert(expands != null),
+       assert(
+         !expands || (maxLines == null && minLines == null),
+         'minLines and maxLines must be null when expands is true.',
+       ),
        assert(maxLength == null || maxLength > 0),
        assert(clearButtonMode != null),
        assert(prefixMode != null),
@@ -220,6 +256,17 @@ class CupertinoTextField extends StatefulWidget {
   /// The text style of the placeholder text matches that of the text field's
   /// main text entry except a lighter font weight and a grey font color.
   final String placeholder;
+
+  /// The style to use for the placeholder text.
+  ///
+  /// The [placeholderStyle] is merged with the [style] [TextStyle] when applied
+  /// to the [placeholder] text. To avoid merging with [style], specify
+  /// [TextStyle.inherit] as false.
+  ///
+  /// Defaults to the [style] property with w300 font weight and grey color.
+  ///
+  /// If specifically set to null, placeholder's style will be the same as [style].
+  final TextStyle placeholderStyle;
 
   /// An optional [Widget] to display before the text.
   final Widget prefix;
@@ -278,6 +325,15 @@ class CupertinoTextField extends StatefulWidget {
   /// {@macro flutter.widgets.editableText.textAlign}
   final TextAlign textAlign;
 
+  /// {@macro flutter.material.inputDecorator.textAlignVertical}
+  final TextAlignVertical textAlignVertical;
+
+  /// {@macro flutter.widgets.editableText.readOnly}
+  final bool readOnly;
+
+  /// {@macro flutter.widgets.editableText.showCursor}
+  final bool showCursor;
+
   /// {@macro flutter.widgets.editableText.autofocus}
   final bool autofocus;
 
@@ -289,6 +345,12 @@ class CupertinoTextField extends StatefulWidget {
 
   /// {@macro flutter.widgets.editableText.maxLines}
   final int maxLines;
+
+  /// {@macro flutter.widgets.editableText.minLines}
+  final int minLines;
+
+  /// {@macro flutter.widgets.editableText.expands}
+  final bool expands;
 
   /// The maximum number of characters (Unicode scalar values) to allow in the
   /// text field.
@@ -384,18 +446,38 @@ class CupertinoTextField extends StatefulWidget {
   /// {@macro flutter.widgets.editableText.scrollPadding}
   final EdgeInsets scrollPadding;
 
+  /// {@macro flutter.widgets.editableText.enableInteractiveSelection}
+  final bool enableInteractiveSelection;
+
+  /// {@macro flutter.widgets.scrollable.dragStartBehavior}
+  final DragStartBehavior dragStartBehavior;
+
+  /// {@macro flutter.widgets.editableText.scrollController}
+  final ScrollController scrollController;
+
+  /// {@macro flutter.widgets.edtiableText.scrollPhysics}
+  final ScrollPhysics scrollPhysics;
+
+  /// {@macro flutter.rendering.editable.selectionEnabled}
+  bool get selectionEnabled {
+    return enableInteractiveSelection ?? !obscureText;
+  }
+
+  /// {@macro flutter.material.textfield.onTap}
+  final GestureTapCallback onTap;
+
   @override
   _CupertinoTextFieldState createState() => _CupertinoTextFieldState();
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-
     properties.add(DiagnosticsProperty<TextEditingController>('controller', controller, defaultValue: null));
     properties.add(DiagnosticsProperty<FocusNode>('focusNode', focusNode, defaultValue: null));
     properties.add(DiagnosticsProperty<BoxDecoration>('decoration', decoration));
     properties.add(DiagnosticsProperty<EdgeInsetsGeometry>('padding', padding));
     properties.add(StringProperty('placeholder', placeholder));
+    properties.add(DiagnosticsProperty<TextStyle>('placeholderStyle', placeholderStyle));
     properties.add(DiagnosticsProperty<OverlayVisibilityMode>('prefix', prefix == null ? null : prefixMode));
     properties.add(DiagnosticsProperty<OverlayVisibilityMode>('suffix', suffix == null ? null : suffixMode));
     properties.add(DiagnosticsProperty<OverlayVisibilityMode>('clearButtonMode', clearButtonMode));
@@ -405,13 +487,21 @@ class CupertinoTextField extends StatefulWidget {
     properties.add(DiagnosticsProperty<bool>('obscureText', obscureText, defaultValue: false));
     properties.add(DiagnosticsProperty<bool>('autocorrect', autocorrect, defaultValue: false));
     properties.add(IntProperty('maxLines', maxLines, defaultValue: 1));
+    properties.add(IntProperty('minLines', minLines, defaultValue: null));
+    properties.add(DiagnosticsProperty<bool>('expands', expands, defaultValue: false));
     properties.add(IntProperty('maxLength', maxLength, defaultValue: null));
     properties.add(FlagProperty('maxLengthEnforced', value: maxLengthEnforced, ifTrue: 'max length enforced'));
-    properties.add(DiagnosticsProperty<Color>('cursorColor', cursorColor, defaultValue: null));
+    properties.add(ColorProperty('cursorColor', cursorColor, defaultValue: null));
+    properties.add(FlagProperty('selectionEnabled', value: selectionEnabled, defaultValue: true, ifFalse: 'selection disabled'));
+    properties.add(DiagnosticsProperty<ScrollController>('scrollController', scrollController, defaultValue: null));
+    properties.add(DiagnosticsProperty<ScrollPhysics>('scrollPhysics', scrollPhysics, defaultValue: null));
+    properties.add(EnumProperty<TextAlign>('textAlign', textAlign, defaultValue: TextAlign.start));
+    properties.add(DiagnosticsProperty<TextAlignVertical>('textAlignVertical', textAlignVertical, defaultValue: null));
   }
 }
 
 class _CupertinoTextFieldState extends State<CupertinoTextField> with AutomaticKeepAliveClientMixin {
+  final GlobalKey _clearGlobalKey = GlobalKey();
   final GlobalKey<EditableTextState> _editableTextKey = GlobalKey<EditableTextState>();
 
   TextEditingController _controller;
@@ -419,6 +509,14 @@ class _CupertinoTextFieldState extends State<CupertinoTextField> with AutomaticK
 
   FocusNode _focusNode;
   FocusNode get _effectiveFocusNode => widget.focusNode ?? (_focusNode ??= FocusNode());
+
+  // The selection overlay should only be shown when the user is interacting
+  // through a touch screen (via either a finger or a stylus). A mouse shouldn't
+  // trigger the selection overlay.
+  // For backwards-compatibility, we treat a null kind the same as touch.
+  bool _shouldShowSelectionToolbar = true;
+
+  bool _showSelectionHandles = false;
 
   @override
   void initState() {
@@ -452,21 +550,35 @@ class _CupertinoTextFieldState extends State<CupertinoTextField> with AutomaticK
     super.dispose();
   }
 
+  EditableTextState get _editableText => _editableTextKey.currentState;
+
   void _requestKeyboard() {
-    _editableTextKey.currentState?.requestKeyboard();
+    _editableText?.requestKeyboard();
   }
 
-  RenderEditable get _renderEditable => _editableTextKey.currentState.renderEditable;
+  RenderEditable get _renderEditable => _editableText.renderEditable;
 
   void _handleTapDown(TapDownDetails details) {
     _renderEditable.handleTapDown(details);
+
+    // The selection overlay should only be shown when the user is interacting
+    // through a touch screen (via either a finger or a stylus). A mouse shouldn't
+    // trigger the selection overlay.
+    // For backwards-compatibility, we treat a null kind the same as touch.
+    final PointerDeviceKind kind = details.kind;
+    _shouldShowSelectionToolbar =
+        kind == null ||
+        kind == PointerDeviceKind.touch ||
+        kind == PointerDeviceKind.stylus;
   }
 
   void _handleForcePressStarted(ForcePressDetails details) {
-    _renderEditable.selectWordsInRange(
-      from: details.globalPosition,
-      cause: SelectionChangedCause.forcePress,
-    );
+    if (widget.selectionEnabled) {
+      _renderEditable.selectWordsInRange(
+        from: details.globalPosition,
+        cause: SelectionChangedCause.forcePress,
+      );
+    }
   }
 
   void _handleForcePressEnded(ForcePressDetails details) {
@@ -474,40 +586,113 @@ class _CupertinoTextFieldState extends State<CupertinoTextField> with AutomaticK
       from: details.globalPosition,
       cause: SelectionChangedCause.forcePress,
     );
-    _editableTextKey.currentState.showToolbar();
+    if (_shouldShowSelectionToolbar)
+      _editableText.showToolbar();
   }
 
   void _handleSingleTapUp(TapUpDetails details) {
-    _renderEditable.selectWordEdge(cause: SelectionChangedCause.tap);
+    // Because TextSelectionGestureDetector listens to taps that happen on
+    // widgets in front of it, tapping the clear button will also trigger
+    // this handler. If the the clear button widget recognizes the up event,
+    // then do not handle it.
+    if (_clearGlobalKey.currentContext != null) {
+      final RenderBox renderBox = _clearGlobalKey.currentContext.findRenderObject();
+      final Offset localOffset = renderBox.globalToLocal(details.globalPosition);
+      if(renderBox.hitTest(BoxHitTestResult(), position: localOffset)) {
+        return;
+      }
+    }
+
+    if (widget.selectionEnabled) {
+      _renderEditable.selectWordEdge(cause: SelectionChangedCause.tap);
+    }
     _requestKeyboard();
+    if (widget.onTap != null) {
+      widget.onTap();
+    }
   }
 
   void _handleSingleLongTapStart(LongPressStartDetails details) {
-    _renderEditable.selectPositionAt(
-      from: details.globalPosition,
-      cause: SelectionChangedCause.longPress,
-    );
+    if (widget.selectionEnabled) {
+      _renderEditable.selectPositionAt(
+        from: details.globalPosition,
+        cause: SelectionChangedCause.longPress,
+      );
+    }
   }
 
   void _handleSingleLongTapMoveUpdate(LongPressMoveUpdateDetails details) {
-    _renderEditable.selectPositionAt(
-      from: details.globalPosition,
-      cause: SelectionChangedCause.longPress,
-    );
+    if (widget.selectionEnabled) {
+      _renderEditable.selectPositionAt(
+        from: details.globalPosition,
+        cause: SelectionChangedCause.longPress,
+      );
+    }
   }
 
   void _handleSingleLongTapEnd(LongPressEndDetails details) {
-    _editableTextKey.currentState.showToolbar();
+    if (_shouldShowSelectionToolbar)
+      _editableText.showToolbar();
   }
 
   void _handleDoubleTapDown(TapDownDetails details) {
-    _renderEditable.selectWord(cause: SelectionChangedCause.tap);
-    _editableTextKey.currentState.showToolbar();
+    if (widget.selectionEnabled) {
+      _renderEditable.selectWord(cause: SelectionChangedCause.tap);
+      if (_shouldShowSelectionToolbar)
+        _editableText.showToolbar();
+    }
+  }
+
+  bool _shouldShowSelectionHandles(SelectionChangedCause cause) {
+    // When the text field is activated by something that doesn't trigger the
+    // selection overlay, we shouldn't show the handles either.
+    if (!_shouldShowSelectionToolbar)
+      return false;
+
+    // On iOS, we don't show handles when the selection is collapsed.
+    if (_effectiveController.selection.isCollapsed)
+      return false;
+
+    if (cause == SelectionChangedCause.keyboard)
+      return false;
+
+    if (_effectiveController.text.isNotEmpty)
+      return true;
+
+    return false;
+  }
+
+  void _handleMouseDragSelectionStart(DragStartDetails details) {
+    _renderEditable.selectPositionAt(
+      from: details.globalPosition,
+      cause: SelectionChangedCause.drag,
+    );
+  }
+
+  void _handleMouseDragSelectionUpdate(
+      DragStartDetails startDetails,
+      DragUpdateDetails updateDetails,
+  ) {
+    _renderEditable.selectPositionAt(
+      from: startDetails.globalPosition,
+      to: updateDetails.globalPosition,
+      cause: SelectionChangedCause.drag,
+    );
+  }
+
+  void _handleMouseDragSelectionEnd(DragEndDetails details) {
+    _requestKeyboard();
   }
 
   void _handleSelectionChanged(TextSelection selection, SelectionChangedCause cause) {
     if (cause == SelectionChangedCause.longPress) {
-      _editableTextKey.currentState?.bringIntoView(selection.base);
+      _editableText?.bringIntoView(selection.base);
+    }
+    final bool willShowSelectionHandles = _shouldShowSelectionHandles(cause);
+    if (willShowSelectionHandles != _showSelectionHandles) {
+      setState(() {
+        _showSelectionHandles = willShowSelectionHandles;
+      });
     }
   }
 
@@ -553,15 +738,31 @@ class _CupertinoTextFieldState extends State<CupertinoTextField> with AutomaticK
     );
   }
 
-  Widget _addTextDependentAttachments(Widget editableText, TextStyle textStyle) {
+  // True if any surrounding decoration widgets will be shown.
+  bool get _hasDecoration {
+    return widget.placeholder != null ||
+      widget.clearButtonMode != OverlayVisibilityMode.never ||
+      widget.prefix != null ||
+      widget.suffix != null;
+  }
+
+  // Provide default behavior if widget.textAlignVertical is not set.
+  // CupertinoTextField has top alignment by default, unless it has decoration
+  // like a prefix or suffix, in which case it's aligned to the center.
+  TextAlignVertical get _textAlignVertical {
+    if (widget.textAlignVertical != null) {
+      return widget.textAlignVertical;
+    }
+    return _hasDecoration ? TextAlignVertical.center : TextAlignVertical.top;
+  }
+
+  Widget _addTextDependentAttachments(Widget editableText, TextStyle textStyle, TextStyle placeholderStyle) {
     assert(editableText != null);
     assert(textStyle != null);
+    assert(placeholderStyle != null);
     // If there are no surrounding widgets, just return the core editable text
     // part.
-    if (widget.placeholder == null &&
-        widget.clearButtonMode == OverlayVisibilityMode.never &&
-        widget.prefix == null &&
-        widget.suffix == null) {
+    if (!_hasDecoration) {
       return editableText;
     }
 
@@ -584,17 +785,16 @@ class _CupertinoTextFieldState extends State<CupertinoTextField> with AutomaticK
         // if needed.
         if (widget.placeholder != null && text.text.isEmpty) {
           stackChildren.add(
-            Padding(
-              padding: widget.padding,
-              child: Text(
-                widget.placeholder,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: textStyle.merge(
-                  const TextStyle(
-                    color: _kInactiveTextColor,
-                    fontWeight: FontWeight.w300,
-                  ),
+            SizedBox(
+              width: double.infinity,
+              child: Padding(
+                padding: widget.padding,
+                child: Text(
+                  widget.placeholder,
+                  maxLines: widget.maxLines,
+                  overflow: TextOverflow.ellipsis,
+                  style: placeholderStyle,
+                  textAlign: widget.textAlign,
                 ),
               ),
             ),
@@ -610,9 +810,15 @@ class _CupertinoTextFieldState extends State<CupertinoTextField> with AutomaticK
         } else if (_showClearButton(text)) {
           rowChildren.add(
             GestureDetector(
-              onTap: widget.enabled ?? true
-                  ? () => _effectiveController.clear()
-                  : null,
+              key: _clearGlobalKey,
+              onTap: widget.enabled ?? true ? () {
+                // Special handle onChanged for ClearButton
+                // Also call onChanged when the clear button is tapped.
+                final bool textChanged = _effectiveController.text.isNotEmpty;
+                _effectiveController.clear();
+                if (widget.onChanged != null && textChanged)
+                  widget.onChanged(_effectiveController.text);
+              } : null,
               child: const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 6.0),
                 child: Icon(
@@ -643,7 +849,16 @@ class _CupertinoTextFieldState extends State<CupertinoTextField> with AutomaticK
     }
     final CupertinoThemeData themeData = CupertinoTheme.of(context);
     final TextStyle textStyle = themeData.textTheme.textStyle.merge(widget.style);
+    final TextStyle placeholderStyle = textStyle.merge(widget.placeholderStyle);
     final Brightness keyboardAppearance = widget.keyboardAppearance ?? themeData.brightness;
+    final Color cursorColor = widget.cursorColor ?? themeData.primaryColor;
+    final Color disabledColor = CupertinoTheme.of(context).brightness == Brightness.light
+      ? _kDisabledBackground
+      : CupertinoColors.darkBackgroundGray;
+
+    final BoxDecoration effectiveDecoration = enabled
+      ? widget.decoration
+      : widget.decoration?.copyWith(color: widget.decoration?.color ?? disabledColor);
 
     final Widget paddedEditable = Padding(
       padding: widget.padding,
@@ -651,6 +866,9 @@ class _CupertinoTextFieldState extends State<CupertinoTextField> with AutomaticK
         child: EditableText(
           key: _editableTextKey,
           controller: controller,
+          readOnly: widget.readOnly,
+          showCursor: widget.showCursor,
+          showSelectionHandles: _showSelectionHandles,
           focusNode: _effectiveFocusNode,
           keyboardType: widget.keyboardType,
           textInputAction: widget.textInputAction,
@@ -662,8 +880,11 @@ class _CupertinoTextFieldState extends State<CupertinoTextField> with AutomaticK
           obscureText: widget.obscureText,
           autocorrect: widget.autocorrect,
           maxLines: widget.maxLines,
+          minLines: widget.minLines,
+          expands: widget.expands,
           selectionColor: _kSelectionHighlightColor,
-          selectionControls: cupertinoTextSelectionControls,
+          selectionControls: widget.selectionEnabled
+            ? cupertinoTextSelectionControls : null,
           onChanged: widget.onChanged,
           onSelectionChanged: _handleSelectionChanged,
           onEditingComplete: widget.onEditingComplete,
@@ -672,13 +893,17 @@ class _CupertinoTextFieldState extends State<CupertinoTextField> with AutomaticK
           rendererIgnoresPointer: true,
           cursorWidth: widget.cursorWidth,
           cursorRadius: widget.cursorRadius,
-          cursorColor: themeData.primaryColor,
+          cursorColor: cursorColor,
           cursorOpacityAnimates: true,
           cursorOffset: cursorOffset,
           paintCursorAboveText: true,
           backgroundCursorColor: CupertinoColors.inactiveGray,
           scrollPadding: widget.scrollPadding,
           keyboardAppearance: keyboardAppearance,
+          dragStartBehavior: widget.dragStartBehavior,
+          scrollController: widget.scrollController,
+          scrollPhysics: widget.scrollPhysics,
+          enableInteractiveSelection: widget.enableInteractiveSelection,
         ),
       ),
     );
@@ -693,25 +918,25 @@ class _CupertinoTextFieldState extends State<CupertinoTextField> with AutomaticK
       child: IgnorePointer(
         ignoring: !enabled,
         child: Container(
-          decoration: widget.decoration,
-          // The main decoration and the disabled scrim exists separately.
-          child: Container(
-            color: enabled
-                ? null
-                : CupertinoTheme.of(context).brightness == Brightness.light
-                    ? _kDisabledBackground
-                    : CupertinoColors.darkBackgroundGray,
-            child: TextSelectionGestureDetector(
-              onTapDown: _handleTapDown,
-              onForcePressStart: _handleForcePressStarted,
-              onForcePressEnd: _handleForcePressEnded,
-              onSingleTapUp: _handleSingleTapUp,
-              onSingleLongTapStart: _handleSingleLongTapStart,
-              onSingleLongTapMoveUpdate: _handleSingleLongTapMoveUpdate,
-              onSingleLongTapEnd: _handleSingleLongTapEnd,
-              onDoubleTapDown: _handleDoubleTapDown,
-              behavior: HitTestBehavior.translucent,
-              child: _addTextDependentAttachments(paddedEditable, textStyle),
+          decoration: effectiveDecoration,
+          child: TextSelectionGestureDetector(
+            onTapDown: _handleTapDown,
+            onForcePressStart: _handleForcePressStarted,
+            onForcePressEnd: _handleForcePressEnded,
+            onSingleTapUp: _handleSingleTapUp,
+            onSingleLongTapStart: _handleSingleLongTapStart,
+            onSingleLongTapMoveUpdate: _handleSingleLongTapMoveUpdate,
+            onSingleLongTapEnd: _handleSingleLongTapEnd,
+            onDoubleTapDown: _handleDoubleTapDown,
+            onDragSelectionStart: _handleMouseDragSelectionStart,
+            onDragSelectionUpdate: _handleMouseDragSelectionUpdate,
+            onDragSelectionEnd: _handleMouseDragSelectionEnd,
+            behavior: HitTestBehavior.translucent,
+            child: Align(
+              alignment: Alignment(-1.0, _textAlignVertical.y),
+              widthFactor: 1.0,
+              heightFactor: 1.0,
+              child: _addTextDependentAttachments(paddedEditable, textStyle, placeholderStyle),
             ),
           ),
         ),

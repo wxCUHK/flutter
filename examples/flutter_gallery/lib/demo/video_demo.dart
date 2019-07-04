@@ -50,8 +50,11 @@ class VideoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget fullScreenRoutePageBuilder(BuildContext context,
-        Animation<double> animation, Animation<double> secondaryAnimation) {
+    Widget fullScreenRoutePageBuilder(
+      BuildContext context,
+      Animation<double> animation,
+      Animation<double> secondaryAnimation,
+    ) {
       return _buildFullScreenVideo();
     }
 
@@ -402,19 +405,21 @@ class _VideoDemoState extends State<VideoDemo> with SingleTickerProviderStateMix
       ),
       body: isSupported
         ? ConnectivityOverlay(
-            child: ListView(
-              children: <Widget>[
-                VideoCard(
-                  title: 'Butterfly',
-                  subtitle: '… flutters by',
-                  controller: butterflyController,
-                ),
-                VideoCard(
-                  title: 'Bee',
-                  subtitle: '… gently buzzing',
-                  controller: beeController,
-                ),
-              ],
+            child: Scrollbar(
+              child: ListView(
+                children: <Widget>[
+                  VideoCard(
+                    title: 'Butterfly',
+                    subtitle: '… flutters by',
+                    controller: butterflyController,
+                  ),
+                  VideoCard(
+                    title: 'Bee',
+                    subtitle: '… gently buzzing',
+                    controller: beeController,
+                  ),
+                ],
+              ),
             ),
             connectedCompleter: connectedCompleter,
             scaffoldKey: scaffoldKey,

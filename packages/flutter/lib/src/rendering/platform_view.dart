@@ -230,7 +230,7 @@ class RenderAndroidView extends RenderBox {
   }
 
   @override
-  bool hitTest(HitTestResult result, { Offset position }) {
+  bool hitTest(BoxHitTestResult result, { Offset position }) {
     if (hitTestBehavior == PlatformViewHitTestBehavior.transparent || !size.contains(position))
       return false;
     result.add(BoxHitTestEntry(this, position));
@@ -311,8 +311,12 @@ class RenderUiKitView extends RenderBox {
   UiKitViewController _viewController;
   set viewController(UiKitViewController viewController) {
     assert(viewController != null);
+    final bool needsSemanticsUpdate = _viewController.id != viewController.id;
     _viewController = viewController;
     markNeedsPaint();
+    if (needsSemanticsUpdate) {
+      markNeedsSemanticsUpdate();
+    }
   }
 
   /// How to behave during hit testing.
@@ -361,7 +365,7 @@ class RenderUiKitView extends RenderBox {
   }
 
   @override
-  bool hitTest(HitTestResult result, { Offset position }) {
+  bool hitTest(BoxHitTestResult result, { Offset position }) {
     if (hitTestBehavior == PlatformViewHitTestBehavior.transparent || !size.contains(position))
       return false;
     result.add(BoxHitTestEntry(this, position));
@@ -377,7 +381,7 @@ class RenderUiKitView extends RenderBox {
       return;
     }
     _gestureRecognizer.addPointer(event);
-    _lastPointerDownEvent = event;
+    _lastPointerDownEvent = event.original ?? event;
   }
 
   // This is registered as a global PointerRoute while the render object is attached.
@@ -385,11 +389,10 @@ class RenderUiKitView extends RenderBox {
     if (event is! PointerDownEvent) {
       return;
     }
-    final Offset localOffset = globalToLocal(event.position);
-    if(!(Offset.zero & size).contains(localOffset)) {
+    if (!(Offset.zero & size).contains(event.localPosition)) {
       return;
     }
-    if (event != _lastPointerDownEvent) {
+    if ((event.original ?? event) != _lastPointerDownEvent) {
       // The pointer event is in the bounds of this render box, but we didn't get it in handleEvent.
       // This means that the pointer event was absorbed by a different render object.
       // Since on the platform side the FlutterTouchIntercepting view is seeing all events that are
@@ -397,6 +400,13 @@ class RenderUiKitView extends RenderBox {
       _viewController.rejectGesture();
     }
     _lastPointerDownEvent = null;
+  }
+
+  @override
+  void describeSemanticsConfiguration (SemanticsConfiguration config) {
+    super.describeSemanticsConfiguration(config);
+    config.isSemanticBoundary = true;
+    config.platformViewId = _viewController.id;
   }
 
   @override
@@ -419,9 +429,11 @@ class RenderUiKitView extends RenderBox {
 // When the team wins a gesture the recognizer notifies the engine that it should release
 // the touch sequence to the embedded UIView.
 class _UiKitViewGestureRecognizer extends OneSequenceGestureRecognizer {
-  _UiKitViewGestureRecognizer(this.controller, this.gestureRecognizerFactories, {
+  _UiKitViewGestureRecognizer(
+    this.controller,
+    this.gestureRecognizerFactories, {
     PointerDeviceKind kind,
-  }): super(kind: kind) {
+  }) : super(kind: kind) {
     team = GestureArenaTeam();
     team.captain = this;
     _gestureRecognizers = gestureRecognizerFactories.map(
@@ -442,7 +454,7 @@ class _UiKitViewGestureRecognizer extends OneSequenceGestureRecognizer {
 
   @override
   void addAllowedPointer(PointerDownEvent event) {
-    startTrackingPointer(event.pointer);
+    startTrackingPointer(event.pointer, event.transform);
     for (OneSequenceGestureRecognizer recognizer in _gestureRecognizers) {
       recognizer.addPointer(event);
     }
@@ -481,9 +493,11 @@ class _UiKitViewGestureRecognizer extends OneSequenceGestureRecognizer {
 // When the team wins the recognizer sends all the cached point events to the embedded Android view, and
 // sets itself to a "forwarding mode" where it will forward any new pointer event to the Android view.
 class _AndroidViewGestureRecognizer extends OneSequenceGestureRecognizer {
-  _AndroidViewGestureRecognizer(this.dispatcher, this.gestureRecognizerFactories, {
+  _AndroidViewGestureRecognizer(
+    this.dispatcher,
+    this.gestureRecognizerFactories, {
     PointerDeviceKind kind,
-  }): super(kind: kind) {
+  }) : super(kind: kind) {
     team = GestureArenaTeam();
     team.captain = this;
     _gestureRecognizers = gestureRecognizerFactories.map(
@@ -499,7 +513,7 @@ class _AndroidViewGestureRecognizer extends OneSequenceGestureRecognizer {
   // Before the arena for a pointer is resolved all events are cached here, if we win the arena
   // the cached events are dispatched to the view, if we lose the arena we clear the cache for
   // the pointer.
-  final Map<int, List<PointerEvent>> cachedEvents = <int, List<PointerEvent>> {};
+  final Map<int, List<PointerEvent>> cachedEvents = <int, List<PointerEvent>>{};
 
   // Pointer for which we have already won the arena, events for pointers in this set are
   // immediately dispatched to the Android view.
@@ -513,7 +527,7 @@ class _AndroidViewGestureRecognizer extends OneSequenceGestureRecognizer {
 
   @override
   void addAllowedPointer(PointerDownEvent event) {
-    startTrackingPointer(event.pointer);
+    startTrackingPointer(event.pointer, event.transform);
     for (OneSequenceGestureRecognizer recognizer in _gestureRecognizers) {
       recognizer.addPointer(event);
     }
@@ -711,4 +725,3 @@ class _MotionEventsDispatcher {
   bool isSinglePointerAction(PointerEvent event) =>
       !(event is PointerDownEvent) && !(event is PointerUpEvent);
 }
-

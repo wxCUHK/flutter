@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'dart:ui' as ui show ParagraphStyle, TextStyle, StrutStyle, lerpDouble, Shadow;
+import 'dart:ui' as ui show ParagraphStyle, TextStyle, StrutStyle, lerpDouble, Shadow, FontFeature;
 
 import 'package:flutter/foundation.dart';
 
 import 'basic_types.dart';
+import 'colors.dart';
 import 'strut_style.dart';
 
 const String _kDefaultDebugLabel = 'unknown';
@@ -292,6 +293,8 @@ const String _kColorBackgroundWarning = 'Cannot provide both a backgroundColor a
 ///  * [RichText], the widget for showing a paragraph of mix-style text.
 ///  * [TextSpan], the class that wraps a [TextStyle] for the purposes of
 ///    passing it to a [RichText].
+///  * [TextStyle](https://api.flutter.dev/flutter/dart-ui/TextStyle-class.html), the class in the [dart:ui] library.
+///
 @immutable
 class TextStyle extends Diagnosticable {
   /// Creates a text style.
@@ -314,6 +317,7 @@ class TextStyle extends Diagnosticable {
     this.foreground,
     this.background,
     this.shadows,
+    this.fontFeatures,
     this.decoration,
     this.decorationColor,
     this.decorationStyle,
@@ -560,6 +564,15 @@ class TextStyle extends Diagnosticable {
   /// equivalent as order produces differing transparency.
   final List<ui.Shadow> shadows;
 
+  /// A list of [FontFeature]s that affect how the font selects glyphs.
+  ///
+  /// Some fonts support multiple variants of how a given character can be
+  /// rendered.  For example, a font might provide both proportional and
+  /// tabular numbers, or it might offer versions of the zero digit with
+  /// and without slashes.  [FontFeature]s can be used to select which of
+  /// these variants will be used for rendering.
+  final List<ui.FontFeature> fontFeatures;
+
   /// Creates a copy of this text style but with the given fields replaced with
   /// the new values.
   ///
@@ -586,6 +599,7 @@ class TextStyle extends Diagnosticable {
     Paint foreground,
     Paint background,
     List<ui.Shadow> shadows,
+    List<ui.FontFeature> fontFeatures,
     TextDecoration decoration,
     Color decorationColor,
     TextDecorationStyle decorationStyle,
@@ -617,6 +631,7 @@ class TextStyle extends Diagnosticable {
       foreground: foreground ?? this.foreground,
       background: background ?? this.background,
       shadows: shadows ?? this.shadows,
+      fontFeatures: fontFeatures ?? this.fontFeatures,
       decoration: decoration ?? this.decoration,
       decorationColor: decorationColor ?? this.decorationColor,
       decorationStyle: decorationStyle ?? this.decorationStyle,
@@ -716,6 +731,7 @@ class TextStyle extends Diagnosticable {
       foreground: foreground,
       background: background,
       shadows: shadows,
+      fontFeatures: fontFeatures,
       decoration: decoration ?? this.decoration,
       decorationColor: decorationColor ?? this.decorationColor,
       decorationStyle: decorationStyle ?? this.decorationStyle,
@@ -774,6 +790,7 @@ class TextStyle extends Diagnosticable {
       foreground: other.foreground,
       background: other.background,
       shadows: other.shadows,
+      fontFeatures: other.fontFeatures,
       decoration: other.decoration,
       decorationColor: other.decorationColor,
       decorationStyle: other.decorationStyle,
@@ -827,6 +844,7 @@ class TextStyle extends Diagnosticable {
         background: t < 0.5 ? null : b.background,
         decoration: t < 0.5 ? null : b.decoration,
         shadows: t < 0.5 ? null : b.shadows,
+        fontFeatures: t < 0.5 ? null : b.fontFeatures,
         decorationColor: Color.lerp(null, b.decorationColor, t),
         decorationStyle: t < 0.5 ? null : b.decorationStyle,
         decorationThickness: t < 0.5 ? null : b.decorationThickness,
@@ -852,6 +870,7 @@ class TextStyle extends Diagnosticable {
         foreground: t < 0.5 ? a.foreground : null,
         background: t < 0.5 ? a.background : null,
         shadows: t < 0.5 ? a.shadows : null,
+        fontFeatures: t < 0.5 ? a.fontFeatures : null,
         decoration: t < 0.5 ? a.decoration : null,
         decorationColor: Color.lerp(a.decorationColor, null, t),
         decorationStyle: t < 0.5 ? a.decorationStyle : null,
@@ -885,6 +904,7 @@ class TextStyle extends Diagnosticable {
           : b.background ?? (Paint()..color = b.backgroundColor)
         : null,
       shadows: t < 0.5 ? a.shadows : b.shadows,
+      fontFeatures: t < 0.5 ? a.fontFeatures : b.fontFeatures,
       decoration: t < 0.5 ? a.decoration : b.decoration,
       decorationColor: Color.lerp(a.decorationColor, b.decorationColor, t),
       decorationStyle: t < 0.5 ? a.decorationStyle : b.decorationStyle,
@@ -917,6 +937,7 @@ class TextStyle extends Diagnosticable {
         : null
       ),
       shadows: shadows,
+      fontFeatures: fontFeatures,
     );
   }
 
@@ -957,7 +978,7 @@ class TextStyle extends Diagnosticable {
       strutStyle: strutStyle == null ? null : ui.StrutStyle(
         fontFamily: strutStyle.fontFamily,
         fontFamilyFallback: strutStyle.fontFamilyFallback,
-        fontSize: strutStyle.fontSize,
+        fontSize: strutStyle.fontSize == null ? null : strutStyle.fontSize * textScaleFactor,
         height: strutStyle.height,
         leading: strutStyle.leading,
         fontWeight: strutStyle.fontWeight,
@@ -992,6 +1013,7 @@ class TextStyle extends Diagnosticable {
         foreground != other.foreground ||
         background != other.background ||
         !listEquals(shadows, other.shadows) ||
+        !listEquals(fontFeatures, other.fontFeatures) ||
         !listEquals(fontFamilyFallback, other.fontFamilyFallback))
       return RenderComparison.layout;
     if (color != other.color ||
@@ -1030,6 +1052,7 @@ class TextStyle extends Diagnosticable {
            decorationStyle == typedOther.decorationStyle &&
            decorationThickness == typedOther.decorationThickness &&
            listEquals(shadows, typedOther.shadows) &&
+           listEquals(fontFeatures, typedOther.fontFeatures) &&
            listEquals(fontFamilyFallback, typedOther.fontFamilyFallback);
   }
 
@@ -1055,6 +1078,7 @@ class TextStyle extends Diagnosticable {
       decorationColor,
       decorationStyle,
       shadows,
+      fontFeatures,
     );
   }
 
@@ -1068,8 +1092,8 @@ class TextStyle extends Diagnosticable {
     if (debugLabel != null)
       properties.add(MessageProperty('${prefix}debugLabel', debugLabel));
     final List<DiagnosticsNode> styles = <DiagnosticsNode>[];
-    styles.add(DiagnosticsProperty<Color>('${prefix}color', color, defaultValue: null));
-    styles.add(DiagnosticsProperty<Color>('${prefix}backgroundColor', backgroundColor, defaultValue: null));
+    styles.add(ColorProperty('${prefix}color', color, defaultValue: null));
+    styles.add(ColorProperty('${prefix}backgroundColor', backgroundColor, defaultValue: null));
     styles.add(StringProperty('${prefix}family', fontFamily, defaultValue: null, quoted: false));
     styles.add(IterableProperty<String>('${prefix}familyFallback', fontFamilyFallback, defaultValue: null));
     styles.add(DoubleProperty('${prefix}size', fontSize, defaultValue: null));
@@ -1101,7 +1125,7 @@ class TextStyle extends Diagnosticable {
 
       // Hide decorationColor from the default text view as it is shown in the
       // terse decoration summary as well.
-      styles.add(DiagnosticsProperty<Color>('${prefix}decorationColor', decorationColor, defaultValue: null, level: DiagnosticLevel.fine));
+      styles.add(ColorProperty('${prefix}decorationColor', decorationColor, defaultValue: null, level: DiagnosticLevel.fine));
 
       if (decorationColor != null)
         decorationDescription.add('$decorationColor');
